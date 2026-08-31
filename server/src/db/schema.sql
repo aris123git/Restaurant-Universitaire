@@ -45,6 +45,35 @@ CREATE TABLE IF NOT EXISTS students (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Numéros issus de la base universitaire. Seuls ces inscrits peuvent réserver.
+CREATE TABLE IF NOT EXISTS enrolled_students (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone TEXT NOT NULL UNIQUE,
+  student_number TEXT,
+  full_name TEXT,
+  source TEXT NOT NULL DEFAULT 'manual',
+  active INTEGER NOT NULL DEFAULT 1,
+  imported_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrolled_phone ON enrolled_students(phone);
+CREATE INDEX IF NOT EXISTS idx_enrolled_number ON enrolled_students(student_number);
+
+CREATE TABLE IF NOT EXISTS enrollment_imports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  filename TEXT,
+  received_count INTEGER NOT NULL DEFAULT 0,
+  inserted_count INTEGER NOT NULL DEFAULT 0,
+  updated_count INTEGER NOT NULL DEFAULT 0,
+  deactivated_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS dishes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,

@@ -41,8 +41,33 @@ function weekMenu(seed: number): Array<{ weekday: number; service: "MIDI" | "SOI
 export function seedIfEmpty(): void {
   const db = getDb();
   const count = db.prepare("SELECT COUNT(*) AS n FROM cities").get() as { n: number };
+  if (count.n === 0) seedAll();
+  seedEnrollmentsIfMissing();
+}
+
+const DEMO_ENROLLED = [
+  { phone: "+22670111111", studentNumber: "UJKZ-1001", fullName: "Étudiant Demo 1" },
+  { phone: "+22670222222", studentNumber: "UJKZ-1002", fullName: "Étudiant Demo 2" },
+  { phone: "+22670000001", studentNumber: "UJKZ-1003", fullName: "Étudiant Simulateur" },
+  { phone: "+22670000999", studentNumber: "UJKZ-1004", fullName: "Étudiant Test" },
+  { phone: "+22670333333", studentNumber: "UJKZ-1005", fullName: "Étudiant Quota" },
+];
+
+export function seedEnrollmentsIfMissing(): void {
+  const db = getDb();
+  const count = db.prepare("SELECT COUNT(*) AS n FROM enrolled_students").get() as { n: number };
   if (count.n > 0) return;
-  seedAll();
+  const insert = db.prepare(
+    `INSERT INTO enrolled_students (phone, student_number, full_name, source, active, imported_at)
+     VALUES (?, ?, ?, 'demo_seed', 1, datetime('now'))`,
+  );
+  const tx = db.transaction(() => {
+    for (const row of DEMO_ENROLLED) {
+      insert.run(row.phone, row.studentNumber, row.fullName);
+    }
+  });
+  tx();
+  logger.info("db.enrolled_seeded", { count: DEMO_ENROLLED.length });
 }
 
 export function seedAll(): void {
@@ -95,6 +120,7 @@ export function seedAll(): void {
   });
 
   tx();
+  seedEnrollmentsIfMissing();
   logger.info("db.seeded", {
     admin: "admin@ru.bf",
     agentExample: "ujkz@ru.bf",

@@ -15,6 +15,10 @@ export function getOrCreateStudent(phone: string): StudentRow {
   return db.prepare("SELECT * FROM students WHERE id = ?").get(Number(result.lastInsertRowid)) as StudentRow;
 }
 
+export function findStudentByPhone(phone: string): StudentRow | undefined {
+  return getDb().prepare("SELECT * FROM students WHERE phone = ?").get(phone) as StudentRow | undefined;
+}
+
 export function assignRestaurant(studentId: number, cityId: number, restaurantId: number): void {
   getDb()
     .prepare(

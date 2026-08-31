@@ -6,6 +6,13 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { centralDashboard, restaurantHistory } from "../services/dashboardService.js";
 import { getDayMenu } from "../services/menuService.js";
 import { todayIso } from "../lib/dates.js";
+import {
+  importEnrolledStudents,
+  listEnrolled,
+  parseEnrollmentText,
+  setEnrolledActive,
+  upsertEnrolled,
+} from "../services/enrollmentService.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole("CENTRAL_ADMIN"));
@@ -224,4 +231,58 @@ adminRouter.get("/sms", (_req, res) => {
 
 adminRouter.get("/history/:restaurantId", (req, res) => {
   res.json(restaurantHistory(Number(req.params.restaurantId), 60));
+});
+
+adminRouter.get("/enrollments", (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  res.json(listEnrolled(q));
+});
+
+adminRouter.post("/enrollments", (req, res) => {
+  const body = z
+    .object({
+      phone: z.string().min(8),
+      studentNumber: z.string().optional(),
+      fullName: z.string().optional(),
+    })
+    .parse(req.body);
+  const result = upsertEnrolled({ ...body, source: "manual" });
+  res.status(result.inserted ? 201 : 200).json(result);
+});
+
+adminRouter.patch("/enrollments/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const body = z.object({ active: z.boolean() }).parse(req.body);
+  setEnrolledActive(id, body.active);
+  res.json({ ok: true });
+});
+
+adminRouter.post("/enrollments/import", (req, res) => {
+  const body = z
+    .object({
+      text: z.string().min(8).optional(),
+      students: z
+        .array(
+          z.object({
+            phone: z.string().min(8),
+            studentNumber: z.string().optional(),
+            fullName: z.string().optional(),
+          }),
+        )
+        .optional(),
+      source: z.string().optional(),
+      filename: z.string().optional(),
+    })
+    .parse(req.body);
+  const records = body.students ?? (body.text ? parseEnrollmentText(body.text) : []);
+  if (records.length === 0) {
+    res.status(400).json({ error: "Aucun numéro à importer" });
+    return;
+  }
+  const result = importEnrolledStudents(records, body.source ?? "csv_import", body.filename);
+  res.json({
+    ...result,
+    notice:
+      "Import enregistré dans enrolled_students. L'API de la base universitaire n'est pas encore branchée.",
+  });
 });

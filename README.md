@@ -9,10 +9,14 @@ Cette version est un **MVP en mode TEST**. USSD, paiement et SMS sont simulés.
 ## Parcours
 
 ```
-Étudiant → USSD → ville/RU (1re fois) → midi/soir → plat du jour → quantité
-        → paiement simulé → SMS avec code → arrivée au RU
-        → saisie du code sur la tablette → jetons remis
+Étudiant inscrit (base universitaire) → USSD → ville/RU (1re fois)
+        → midi/soir → plat du jour → nombre (max restant)
+        → paiement simulé → SMS : code suivi du numéro
+        → saisie code + téléphone sur la tablette → jetons remis
 ```
+
+Quotas : **2 plats par jour** (midi et soir), **70 plats par mois**.  
+Seuls les numéros présents dans `enrolled_students` peuvent réserver — table prévue pour l’import de la base universitaire.
 
 Chaque RU connecté sur sa tablette **ne voit que ses propres commandes**.
 

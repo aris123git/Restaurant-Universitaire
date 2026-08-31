@@ -7,6 +7,8 @@ import { SimulatedSmsProvider } from "../integrations/sms/SimulatedSmsProvider.j
 import type { ServiceKind } from "../types.js";
 import { findMenuItem } from "./menuService.js";
 import { getRestaurant } from "./studentService.js";
+import { assertCanReserve } from "./quotaService.js";
+import { presentationToken } from "../lib/codes.js";
 
 const paymentProvider = new SimulatedPaymentProvider();
 const smsProvider = new SimulatedSmsProvider();
@@ -66,6 +68,7 @@ export function createPendingReservation(input: {
 }): { reservation: ReservationRow; paymentId: number; transactionId: string } {
   const menuItem = findMenuItem(input.restaurantId, input.service, input.dishId);
   if (!menuItem) throw new Error("Ce plat n'est pas au menu aujourd'hui");
+  assertCanReserve(input.studentId, input.service, input.quantity);
   const amount = menuItem.priceFcfa * input.quantity;
   const date = todayIso();
   const code = uniqueCode();
@@ -174,6 +177,7 @@ export async function confirmPayment(reservationId: number, outcome: "SUCCESS" |
   const restaurant = getRestaurant(paid.restaurant_id);
   const dish = db.prepare("SELECT name FROM dishes WHERE id = ?").get(paid.dish_id) as { name: string };
 
+  const token = presentationToken(paid.reservation_code, student.phone);
   const sms = [
     "Votre réservation est confirmée.",
     "",
@@ -182,10 +186,10 @@ export async function confirmPayment(reservationId: number, outcome: "SUCCESS" |
     `Plat : ${dish.name}`,
     `Nombre de plats : ${paid.quantity}`,
     "",
-    "Code de retrait :",
-    paid.reservation_code,
+    "Code de retrait (code + numéro) :",
+    token,
     "",
-    "Présentez ce code au restaurant universitaire.",
+    "Présentez ce code suivi de votre numéro au restaurant universitaire.",
     "Un jeton physique vous sera remis.",
     "",
     "[TEST] SMS simulé — aucun opérateur n'est intégré.",

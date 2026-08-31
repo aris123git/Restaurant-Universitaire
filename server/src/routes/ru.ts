@@ -24,14 +24,14 @@ ruRouter.get("/history", (req, res) => {
 });
 
 ruRouter.post("/verify", (req, res) => {
-  const { code } = z.object({ code: z.string().min(4) }).parse(req.body);
-  const result = lookupCode(code, scopedRestaurantId(req));
+  const body = z.object({ code: z.string().min(4), phone: z.string().optional() }).parse(req.body);
+  const result = lookupCode(body.code, scopedRestaurantId(req), body.phone);
   res.json(result);
 });
 
 ruRouter.post("/tokens", (req, res) => {
-  const { code } = z.object({ code: z.string().min(4) }).parse(req.body);
+  const body = z.object({ code: z.string().min(4), phone: z.string().optional() }).parse(req.body);
   const user = (req as AuthedRequest).user;
-  const result = issueTokens(code, scopedRestaurantId(req), user.id);
+  const result = issueTokens(body.code, scopedRestaurantId(req), user.id, body.phone);
   res.json(result);
 });

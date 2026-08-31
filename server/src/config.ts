@@ -11,7 +11,9 @@ export const config = {
   clientOrigin: process.env.CLIENT_ORIGIN ?? "http://localhost:5173",
   sessionTimeoutMs: 3 * 60 * 1000,
   timezone: "Africa/Ouagadougou",
-  maxQuantity: 5,
+  maxQuantity: 2,
+  maxPlatesPerDay: 2,
+  maxPlatesPerMonth: 70,
   operatorsNotIntegratedMessage:
     "Aucune intégration opérateur n'est active. USSD, paiement et SMS sont en mode simulation (TEST).",
 } as const;

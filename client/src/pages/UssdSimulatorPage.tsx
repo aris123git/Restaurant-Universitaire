@@ -100,8 +100,9 @@ export function UssdSimulatorPage({ embedded = false }: { embedded?: boolean }) 
             </button>
           </div>
           <p className="rounded-2xl bg-sand p-4 text-sm leading-6">
-            Après un paiement réussi, le code apparaît à l’écran et dans l’inbox SMS de l’administration.
-            L’agent du RU saisit ce code sur la tablette, puis remet les jetons physiques.
+            Seuls les numéros inscrits dans la base universitaire (table des inscrits) peuvent réserver.
+            Numéros de démo : +22670000001, +22670111111. Quota : 2 plats / jour (midi + soir), 70 / mois.
+            Après paiement, présentez le <strong>code suivi du numéro</strong> à la tablette.
           </p>
         </div>
       </div>

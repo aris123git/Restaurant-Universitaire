@@ -16,6 +16,9 @@ import {
   createPendingReservation,
   initiateSimulatedPayment,
 } from "./reservationService.js";
+import { isEnrolled } from "./enrollmentService.js";
+import { maxAllowedQuantity, quotaForStudent } from "./quotaService.js";
+import { presentationToken } from "../lib/codes.js";
 
 type Step =
   | "START"
@@ -83,8 +86,16 @@ function serviceMenu(): string {
   return numbered(["Bienvenue.", "1. Midi", "2. Soir", "3. Modifier mon RU"]);
 }
 
-function quantityMenu(): string {
-  return numbered(["Nombre de plats :", "1. 1 plat", "2. 2 plats", "3. 3 plats", "4. Autre"]);
+function quantityMenu(maxAllowed: number): string {
+  if (maxAllowed <= 0) {
+    return "Quota atteint. Vous ne pouvez plus réserver aujourd'hui.";
+  }
+  const lines = ["Nombre de plats :"];
+  for (let n = 1; n <= maxAllowed; n++) {
+    lines.push(`${n}. ${n} plat${n > 1 ? "s" : ""}`);
+  }
+  lines.push(`Reste aujourd'hui : ${maxAllowed} (max 2 / jour, midi + soir)`);
+  return numbered(lines);
 }
 
 function dishMenu(restaurantId: number, service: ServiceKind) {
@@ -98,6 +109,18 @@ function dishMenu(restaurantId: number, service: ServiceKind) {
 
 export class UssdSessionService {
   async startOrResume(phone: string, sessionId: string | undefined, text: string): Promise<UssdResponse> {
+    if (!isEnrolled(phone)) {
+      return {
+        sessionId: sessionId || "",
+        message: numbered([
+          "Ce numéro n'est pas inscrit au service de restauration universitaire.",
+          "Seuls les étudiants enregistrés dans la base de l'université peuvent réserver.",
+        ]),
+        continueSession: false,
+        step: "DONE",
+      };
+    }
+
     const db = getDb();
     const student = getOrCreateStudent(phone);
     let session: SessionRow | undefined;
@@ -239,6 +262,26 @@ export class UssdSessionService {
       save(session, "SELECT_SERVICE", {}, msg);
       return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_SERVICE" };
     }
+    const quota = quotaForStudent(getOrCreateStudent(session.phone).id, service);
+    if (quota.serviceAlreadyBooked) {
+      const msg = numbered([
+        `Vous avez déjà réservé le ${service === "MIDI" ? "midi" : "soir"} aujourd'hui.`,
+        "1. Midi",
+        "2. Soir",
+        "3. Modifier mon RU",
+      ]);
+      save(session, "SELECT_SERVICE", { service: null }, msg);
+      return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_SERVICE" };
+    }
+    if (quota.dayRemaining <= 0) {
+      return this.end(
+        session,
+        `Quota du jour atteint (${quota.maxPerDay} plats : midi et soir). Revenez demain.`,
+      );
+    }
+    if (quota.monthRemaining <= 0) {
+      return this.end(session, `Quota mensuel atteint (${quota.maxPerMonth} plats).`);
+    }
     const { text: menuText, items } = dishMenu(session.restaurant_id, service);
     if (items.length === 0) {
       save(session, "SELECT_SERVICE", { service: null }, menuText);
@@ -258,20 +301,21 @@ export class UssdSessionService {
       save(session, "SELECT_DISH", {}, msg);
       return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_DISH" };
     }
-    const msg = quantityMenu();
+    const allowed = maxAllowedQuantity(getOrCreateStudent(session.phone).id, session.service);
+    if (allowed <= 0) {
+      return this.end(session, "Quota atteint pour aujourd'hui.");
+    }
+    const msg = quantityMenu(allowed);
     save(session, "SELECT_QUANTITY", { dish_id: item.dishId }, msg);
     return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_QUANTITY" };
   }
 
   private selectQuantity(session: SessionRow, text: string): UssdResponse {
-    if (text === "4") {
-      const msg = `Entrez le nombre de plats (1-${config.maxQuantity}) :`;
-      save(session, "CUSTOM_QUANTITY", {}, msg);
-      return { sessionId: session.session_id, message: msg, continueSession: true, step: "CUSTOM_QUANTITY" };
-    }
+    if (!session.service) return this.fromStart(session, session.restaurant_id);
+    const allowed = maxAllowedQuantity(getOrCreateStudent(session.phone).id, session.service);
     const qty = Number(text);
-    if (![1, 2, 3].includes(qty)) {
-      const msg = numbered(["Choix invalide.", quantityMenu()]);
+    if (!Number.isInteger(qty) || qty < 1 || qty > allowed) {
+      const msg = numbered(["Choix invalide.", quantityMenu(allowed)]);
       save(session, "SELECT_QUANTITY", {}, msg);
       return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_QUANTITY" };
     }
@@ -279,13 +323,7 @@ export class UssdSessionService {
   }
 
   private customQuantity(session: SessionRow, text: string): UssdResponse {
-    const qty = Number(text);
-    if (!Number.isInteger(qty) || qty < 1 || qty > config.maxQuantity) {
-      const msg = `Nombre invalide. Entrez un nombre entre 1 et ${config.maxQuantity} :`;
-      save(session, "CUSTOM_QUANTITY", {}, msg);
-      return { sessionId: session.session_id, message: msg, continueSession: true, step: "CUSTOM_QUANTITY" };
-    }
-    return this.showConfirm(session, qty);
+    return this.selectQuantity(session, text);
   }
 
   private showConfirm(session: SessionRow, quantity: number): UssdResponse {
@@ -326,15 +364,21 @@ export class UssdSessionService {
     }
     const student = getOrCreateStudent(session.phone);
     if (!student.city_id) assignRestaurant(student.id, session.city_id, session.restaurant_id);
-    const created = createPendingReservation({
-      studentId: student.id,
-      restaurantId: session.restaurant_id,
-      cityId: session.city_id,
-      service: session.service,
-      dishId: session.dish_id,
-      quantity: session.quantity,
-      phone: session.phone,
-    });
+    let created;
+    try {
+      created = createPendingReservation({
+        studentId: student.id,
+        restaurantId: session.restaurant_id,
+        cityId: session.city_id,
+        service: session.service,
+        dishId: session.dish_id,
+        quantity: session.quantity,
+        phone: session.phone,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Réservation impossible.";
+      return this.end(session, message);
+    }
     await initiateSimulatedPayment(created.reservation.id, session.phone);
     const msg = numbered([
       "PAIEMENT (MODE TEST)",
@@ -370,11 +414,13 @@ export class UssdSessionService {
       return this.end(session, "Paiement refusé.");
     }
     const code = paid.reservation.reservation_code;
+    const token = presentationToken(code, session.phone);
     const msg = numbered([
       "Réservation confirmée.",
-      `Code : ${code}`,
+      `Code + numéro :`,
+      token,
       "Un SMS simulé a été envoyé.",
-      "Présentez ce code au RU pour recevoir vos jetons.",
+      "Présentez le code suivi de votre numéro au RU.",
     ]);
     save(session, "DONE", { status: "COMPLETED" }, msg);
     return { sessionId: session.session_id, message: msg, continueSession: false, step: "DONE" };

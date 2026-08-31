@@ -17,6 +17,7 @@ type Outcome = {
 const MESSAGES: Record<string, string> = {
   VALID: "Réservation valide",
   NOT_FOUND: "Code introuvable",
+  CODE_PHONE_MISMATCH: "Code et numéro ne correspondent pas",
   WRONG_RESTAURANT: "Ce code n’appartient pas à ce restaurant",
   ALREADY_USED: "Code déjà utilisé",
   EXPIRED: "Code expiré",
@@ -26,6 +27,7 @@ const MESSAGES: Record<string, string> = {
 
 export function RuVerify() {
   const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
   const [result, setResult] = useState<Outcome | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +35,12 @@ export function RuVerify() {
     e.preventDefault();
     setBusy(true);
     try {
-      setResult(await api<Outcome>("/api/ru/verify", { method: "POST", body: JSON.stringify({ code }) }));
+      setResult(
+        await api<Outcome>("/api/ru/verify", {
+          method: "POST",
+          body: JSON.stringify({ code, phone }),
+        }),
+      );
     } catch (err) {
       setResult({ ok: false, reason: err instanceof Error ? err.message : "Erreur" });
     } finally {
@@ -44,7 +51,12 @@ export function RuVerify() {
   async function issue() {
     setBusy(true);
     try {
-      setResult(await api<Outcome>("/api/ru/tokens", { method: "POST", body: JSON.stringify({ code }) }));
+      setResult(
+        await api<Outcome>("/api/ru/tokens", {
+          method: "POST",
+          body: JSON.stringify({ code, phone }),
+        }),
+      );
     } finally {
       setBusy(false);
     }
@@ -57,14 +69,26 @@ export function RuVerify() {
     <div className="mx-auto max-w-2xl">
       <section className="rounded-3xl bg-white p-8 shadow-tablet">
         <h2 className="font-display text-3xl">Vérifier un code</h2>
-        <p className="mt-2 text-moss">Saisissez le code reçu par SMS. Remettez ensuite les jetons physiques déjà sur place.</p>
-        <form onSubmit={lookup} className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <p className="mt-2 text-moss">
+          Saisissez le code SMS <strong>suivi du numéro</strong> de l’étudiant. Remettez ensuite les jetons
+          physiques déjà sur place.
+        </p>
+        <form onSubmit={lookup} className="mt-6 grid gap-3">
+          <label className="text-sm font-semibold">Code de réservation</label>
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="RU-582941"
-            className="flex-1 rounded-2xl border border-sand bg-paper px-4 py-4 text-center font-display text-3xl tracking-[0.35em]"
+            placeholder="RU-XXXXXX"
+            className="w-full rounded-2xl border border-sand bg-paper px-4 py-4 text-center font-display text-3xl tracking-[0.35em]"
             autoFocus
+          />
+          <label className="text-sm font-semibold">Numéro de téléphone</label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="70 00 00 01"
+            inputMode="tel"
+            className="w-full rounded-2xl border border-sand bg-paper px-4 py-4 text-center font-display text-3xl tracking-[0.2em]"
           />
           <button disabled={busy} className="rounded-2xl bg-forest px-8 py-4 text-xl font-semibold text-paper">
             Valider
@@ -85,7 +109,9 @@ export function RuVerify() {
               <p>Étudiant : {result.reservation.phone}</p>
               <p>Service : {result.reservation.service}</p>
               <p>Plat : {result.reservation.dishName}</p>
-              <p className="font-display text-5xl">{result.reservation.quantity} plat{result.reservation.quantity > 1 ? "s" : ""}</p>
+              <p className="font-display text-5xl">
+                {result.reservation.quantity} plat{result.reservation.quantity > 1 ? "s" : ""}
+              </p>
             </div>
           )}
           {valid && (

@@ -1,11 +1,22 @@
 import { getDb, withTransaction } from "../db/client.js";
 import { logger } from "../lib/logger.js";
-import { normalizeReservationCode } from "../lib/codes.js";
+import { parseCodeAndPhone } from "../lib/codes.js";
+import { phonesMatch } from "../lib/phone.js";
 import { expireIfNeeded, type ReservationRow } from "./reservationService.js";
 
 export type VerifyOutcome =
   | { ok: true; reason: "VALID"; reservation: ReservationDetail }
-  | { ok: false; reason: "NOT_FOUND" | "WRONG_RESTAURANT" | "ALREADY_USED" | "EXPIRED" | "NOT_PAID" | "CANCELLED" };
+  | {
+      ok: false;
+      reason:
+        | "NOT_FOUND"
+        | "CODE_PHONE_MISMATCH"
+        | "WRONG_RESTAURANT"
+        | "ALREADY_USED"
+        | "EXPIRED"
+        | "NOT_PAID"
+        | "CANCELLED";
+    };
 
 export type ReservationDetail = {
   id: number;
@@ -44,12 +55,15 @@ function loadByCode(code: string) {
        JOIN dishes d ON d.id = r.dish_id
        WHERE r.reservation_code = ?`,
     )
-    .get(normalizeReservationCode(code)) as (ReservationRow & { phone: string; dish_name: string }) | undefined;
+    .get(code) as (ReservationRow & { phone: string; dish_name: string }) | undefined;
 }
 
-export function lookupCode(code: string, restaurantId: number): VerifyOutcome {
-  const row = loadByCode(code);
-  if (!row) return { ok: false, reason: "NOT_FOUND" };
+export function lookupCode(codeRaw: string, restaurantId: number, phoneRaw?: string): VerifyOutcome {
+  const parsed = parseCodeAndPhone(codeRaw, phoneRaw);
+  if (!parsed.phone) return { ok: false, reason: "CODE_PHONE_MISMATCH" };
+  const row = loadByCode(parsed.code);
+  if (!row) return { ok: false, reason: "CODE_PHONE_MISMATCH" };
+  if (!phonesMatch(row.phone, parsed.phone)) return { ok: false, reason: "CODE_PHONE_MISMATCH" };
   if (row.restaurant_id !== restaurantId) return { ok: false, reason: "WRONG_RESTAURANT" };
   const current = expireIfNeeded(row);
   if (current.status === "EXPIRED") return { ok: false, reason: "EXPIRED" };
@@ -61,9 +75,10 @@ export function lookupCode(code: string, restaurantId: number): VerifyOutcome {
   return { ok: true, reason: "VALID", reservation: toDetail({ ...row, ...current }) };
 }
 
-export function issueTokens(code: string, restaurantId: number, userId: number): VerifyOutcome {
-  const looked = lookupCode(code, restaurantId);
+export function issueTokens(codeRaw: string, restaurantId: number, userId: number, phoneRaw?: string): VerifyOutcome {
+  const looked = lookupCode(codeRaw, restaurantId, phoneRaw);
   if (!looked.ok) return looked;
+  const parsed = parseCodeAndPhone(codeRaw, phoneRaw);
 
   const result = withTransaction((db) => {
     const updated = db
@@ -72,7 +87,7 @@ export function issueTokens(code: string, restaurantId: number, userId: number):
          SET status = 'SERVED', used_at = datetime('now'), token_issued_at = datetime('now'), served_at = datetime('now')
          WHERE reservation_code = ? AND restaurant_id = ? AND status = 'RESERVED' AND payment_status = 'PAID'`,
       )
-      .run(normalizeReservationCode(code), restaurantId);
+      .run(parsed.code, restaurantId);
     if (updated.changes !== 1) return null;
     db.prepare(
       `INSERT INTO tokens_issued (reservation_id, quantity, issued_by_user_id) VALUES (?, ?, ?)`,
@@ -82,7 +97,11 @@ export function issueTokens(code: string, restaurantId: number, userId: number):
     ).run(
       userId,
       restaurantId,
-      JSON.stringify({ code: looked.reservation.code, quantity: looked.reservation.quantity }),
+      JSON.stringify({
+        code: looked.reservation.code,
+        phone: looked.reservation.phone,
+        quantity: looked.reservation.quantity,
+      }),
     );
     return looked.reservation;
   });

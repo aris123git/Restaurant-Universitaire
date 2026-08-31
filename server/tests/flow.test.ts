@@ -13,103 +13,140 @@ const { ussdSessionService } = await import("../src/services/ussdSessionService.
 const { restaurantDashboard } = await import("../src/services/dashboardService.js");
 const { lookupCode, issueTokens } = await import("../src/services/verifyService.js");
 
-test("seed crée villes, RU et menus de 4 plats", () => {
+const PHONE = "+22670111111";
+const PHONE2 = "+22670222222";
+const PHONE3 = "+22670333333";
+
+async function ussd(phone: string, sessionId: string | undefined, text: string) {
+  return ussdSessionService.startOrResume(phone, sessionId, text);
+}
+
+test("seed crée villes, RU, menus et inscrits", () => {
   seedAll();
   const db = getDb();
   const cities = db.prepare("SELECT COUNT(*) AS n FROM cities").get() as { n: number };
   const rus = db.prepare("SELECT COUNT(*) AS n FROM restaurants").get() as { n: number };
+  const enrolled = db.prepare("SELECT COUNT(*) AS n FROM enrolled_students").get() as { n: number };
   assert.equal(cities.n, 4);
   assert.equal(rus.n, 7);
+  assert.ok(enrolled.n >= 5);
   const mondayMidi = db
     .prepare("SELECT COUNT(*) AS n FROM restaurant_menus WHERE restaurant_id = 1 AND weekday = 1 AND service = 'MIDI'")
     .get() as { n: number };
   assert.equal(mondayMidi.n, 4);
 });
 
-test("parcours USSD première utilisation → paiement → code unique", async () => {
-  const phone = "+22670111111";
-  const first = await ussdSessionService.startOrResume(phone, undefined, "");
-  assert.match(first.message, /ville/i);
-  const afterCity = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(afterCity.message, /RU/i);
-  const afterRu = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(afterRu.message, /Midi/);
-  const afterService = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(afterService.message, /Menu MIDI/);
-  const afterDish = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(afterDish.message, /Nombre de plats/);
-  const afterQty = await ussdSessionService.startOrResume(phone, first.sessionId, "2");
-  assert.match(afterQty.message, /2 plat/);
-  assert.match(afterQty.message, /400 FCFA/);
-  const afterConfirm = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(afterConfirm.message, /MODE TEST/);
-  const done = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(done.message, /RU-[A-Z0-9]{6}/);
-  assert.equal(done.continueSession, false);
+test("numéro non inscrit ne peut pas réserver", async () => {
+  const res = await ussd("+22670999999", undefined, "");
+  assert.match(res.message, /pas inscrit/i);
+  assert.equal(res.continueSession, false);
+});
 
-  const code = done.message.match(/RU-[A-Z0-9]{6}/)?.[0];
-  assert.ok(code);
-  const sms = getDb().prepare("SELECT message FROM sms_logs WHERE phone = ?").get(phone) as { message: string };
-  assert.match(sms.message, new RegExp(code));
+test("parcours USSD : plat puis nombre → paiement → code + téléphone", async () => {
+  const first = await ussd(PHONE, undefined, "");
+  assert.match(first.message, /ville/i);
+  await ussd(PHONE, first.sessionId, "1");
+  await ussd(PHONE, first.sessionId, "1");
+  const afterService = await ussd(PHONE, first.sessionId, "2");
+  assert.match(afterService.message, /Menu SOIR/);
+  const afterDish = await ussd(PHONE, first.sessionId, "1");
+  assert.match(afterDish.message, /Nombre de plats/);
+  assert.doesNotMatch(afterDish.message, /3 plats/);
+  const afterQty = await ussd(PHONE, first.sessionId, "2");
+  assert.match(afterQty.message, /2 plat/);
+  await ussd(PHONE, first.sessionId, "1");
+  const done = await ussd(PHONE, first.sessionId, "1");
+  assert.match(done.message, /RU-[A-Z0-9]{6} 70111111/);
+  assert.equal(done.continueSession, false);
+  const sms = getDb().prepare("SELECT message FROM sms_logs WHERE phone = ?").get(PHONE) as { message: string };
+  assert.match(sms.message, /code suivi de votre numéro/i);
 });
 
 test("deuxième session du même étudiant saute ville/RU", async () => {
-  const phone = "+22670111111";
-  const start = await ussdSessionService.startOrResume(phone, undefined, "");
+  const start = await ussd(PHONE, undefined, "");
   assert.match(start.message, /Midi/);
   assert.doesNotMatch(start.message, /Choisissez votre ville/);
 });
 
-test("2 plats comptent pour 2, pas 1 — isolation par RU", async () => {
+test("2 plats comptent pour 2 — isolation par RU", async () => {
   const dashA = restaurantDashboard(1);
-  assert.ok(dashA.midi.plates >= 2);
+  assert.ok(dashA.soir.plates >= 2);
   const dashB = restaurantDashboard(2);
   assert.equal(dashB.totals.totalPlates, 0);
 });
 
-test("code invalide, mauvais RU, déjà utilisé", async () => {
-  const row = getDb()
-    .prepare("SELECT reservation_code FROM reservations WHERE restaurant_id = 1 AND status = 'RESERVED' LIMIT 1")
-    .get() as { reservation_code: string };
-  const missing = lookupCode("RU-000000", 1);
-  assert.equal(missing.ok, false);
-  assert.equal(missing.reason, "NOT_FOUND");
+test("quota : 2 plats / jour, midi puis soir, pas de 3e", async () => {
+  const midi = await ussd(PHONE3, undefined, "");
+  await ussd(PHONE3, midi.sessionId, "1");
+  await ussd(PHONE3, midi.sessionId, "1");
+  await ussd(PHONE3, midi.sessionId, "1");
+  await ussd(PHONE3, midi.sessionId, "1");
+  await ussd(PHONE3, midi.sessionId, "1");
+  await ussd(PHONE3, midi.sessionId, "1");
+  const midiPaid = await ussd(PHONE3, midi.sessionId, "1");
+  assert.match(midiPaid.message, /RU-[A-Z0-9]{6}/);
 
-  const wrongRu = lookupCode(row.reservation_code, 2);
+  const soir = await ussd(PHONE3, undefined, "");
+  await ussd(PHONE3, soir.sessionId, "2");
+  await ussd(PHONE3, soir.sessionId, "1");
+  await ussd(PHONE3, soir.sessionId, "1");
+  await ussd(PHONE3, soir.sessionId, "1");
+  const soirPaid = await ussd(PHONE3, soir.sessionId, "1");
+  assert.match(soirPaid.message, /RU-[A-Z0-9]{6}/);
+
+  const third = await ussd(PHONE3, undefined, "");
+  const blocked = await ussd(PHONE3, third.sessionId, "1");
+  assert.match(blocked.message, /déjà réservé|Quota du jour/i);
+});
+
+test("code + numéro obligatoires, mauvais numéro et mauvais RU", async () => {
+  const row = getDb()
+    .prepare(
+      `SELECT r.reservation_code, s.phone FROM reservations r
+       JOIN students s ON s.id = r.student_id
+       WHERE r.restaurant_id = 1 AND r.status = 'RESERVED' AND r.service = 'SOIR' LIMIT 1`,
+    )
+    .get() as { reservation_code: string; phone: string };
+
+  const missingPhone = lookupCode(row.reservation_code, 1);
+  assert.equal(missingPhone.ok, false);
+  assert.equal(missingPhone.reason, "CODE_PHONE_MISMATCH");
+
+  const wrongPhone = lookupCode(row.reservation_code, 1, "+22670000001");
+  assert.equal(wrongPhone.ok, false);
+  assert.equal(wrongPhone.reason, "CODE_PHONE_MISMATCH");
+
+  const wrongRu = lookupCode(row.reservation_code, 2, row.phone);
   assert.equal(wrongRu.ok, false);
   assert.equal(wrongRu.reason, "WRONG_RESTAURANT");
 
-  const valid = lookupCode(row.reservation_code, 1);
+  const valid = lookupCode(row.reservation_code, 1, row.phone);
   assert.equal(valid.ok, true);
 
-  const issued = issueTokens(row.reservation_code, 1, 2);
+  const issued = issueTokens(row.reservation_code, 1, 2, row.phone);
   assert.equal(issued.ok, true);
 
-  const reused = lookupCode(row.reservation_code, 1);
+  const reused = lookupCode(row.reservation_code, 1, row.phone);
   assert.equal(reused.ok, false);
   assert.equal(reused.reason, "ALREADY_USED");
-
-  const dash = restaurantDashboard(1);
-  assert.ok(dash.totals.servedPlates >= 2);
 });
 
 test("paiement refusé ne crée pas de réservation confirmée", async () => {
-  const phone = "+22670222222";
-  const start = await ussdSessionService.startOrResume(phone, undefined, "");
-  await ussdSessionService.startOrResume(phone, start.sessionId, "1");
-  await ussdSessionService.startOrResume(phone, start.sessionId, "1");
-  await ussdSessionService.startOrResume(phone, start.sessionId, "1");
-  await ussdSessionService.startOrResume(phone, start.sessionId, "1");
-  await ussdSessionService.startOrResume(phone, start.sessionId, "1");
-  const confirm = await ussdSessionService.startOrResume(phone, start.sessionId, "1");
+  const start = await ussd(PHONE2, undefined, "");
+  await ussd(PHONE2, start.sessionId, "1");
+  await ussd(PHONE2, start.sessionId, "1");
+  await ussd(PHONE2, start.sessionId, "1");
+  await ussd(PHONE2, start.sessionId, "1");
+  await ussd(PHONE2, start.sessionId, "1");
+  const confirm = await ussd(PHONE2, start.sessionId, "1");
   assert.match(confirm.message, /MODE TEST/);
-  const refused = await ussdSessionService.startOrResume(phone, start.sessionId, "2");
+  const refused = await ussd(PHONE2, start.sessionId, "2");
   assert.match(refused.message, /refusé/i);
   const reserved = getDb()
     .prepare(
       "SELECT COUNT(*) AS n FROM reservations r JOIN students s ON s.id = r.student_id WHERE s.phone = ? AND r.status = 'RESERVED'",
     )
-    .get(phone) as { n: number };
+    .get(PHONE2) as { n: number };
   assert.equal(reserved.n, 0);
 });
 

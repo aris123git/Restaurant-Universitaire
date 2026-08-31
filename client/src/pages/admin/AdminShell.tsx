@@ -14,6 +14,7 @@ export function AdminShell({ user, onLogout }: { user: AuthUser; onLogout: () =>
           <Item to="/admin/villes">Villes</Item>
           <Item to="/admin/restaurants">Restaurants</Item>
           <Item to="/admin/comptes">Comptes</Item>
+          <Item to="/admin/inscrits">Étudiants inscrits</Item>
           <Item to="/admin/menus">Menus</Item>
           <Item to="/admin/historique">Historique</Item>
           <Item to="/admin/sms">SMS simulés</Item>

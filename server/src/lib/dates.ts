@@ -6,6 +6,15 @@ export function todayIso(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+export function monthBounds(dateIso: string): { start: string; end: string } {
+  const [year, month] = dateIso.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    start: `${dateIso.slice(0, 7)}-01`,
+    end: `${dateIso.slice(0, 7)}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 export function weekdayFromIso(dateIso: string): number {
   return new Date(`${dateIso}T12:00:00Z`).getUTCDay();
 }

@@ -15,6 +15,7 @@ import { AdminUsers } from "./pages/admin/AdminUsers";
 import { AdminMenus } from "./pages/admin/AdminMenus";
 import { AdminSms } from "./pages/admin/AdminSms";
 import { AdminHistory } from "./pages/admin/AdminHistory";
+import { AdminEnrolled } from "./pages/admin/AdminEnrolled";
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -93,6 +94,7 @@ export default function App() {
         <Route path="restaurants" element={<AdminRestaurants />} />
         <Route path="comptes" element={<AdminUsers />} />
         <Route path="menus" element={<AdminMenus />} />
+        <Route path="inscrits" element={<AdminEnrolled />} />
         <Route path="sms" element={<AdminSms />} />
         <Route path="historique" element={<AdminHistory />} />
         <Route path="simulateur" element={<UssdSimulatorPage embedded />} />
