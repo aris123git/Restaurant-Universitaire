@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(27, 77, 62, 0.06), transparent 220px),
+    #f6f1e7;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+input:focus,
+button:focus-visible {
+  outline: 3px solid rgba(196, 163, 90, 0.55);
+  outline-offset: 2px;
+}
