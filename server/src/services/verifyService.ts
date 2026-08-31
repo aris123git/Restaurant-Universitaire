@@ -1,5 +1,6 @@
 import { getDb, withTransaction } from "../db/client.js";
 import { logger } from "../lib/logger.js";
+import { normalizeReservationCode } from "../lib/codes.js";
 import { expireIfNeeded, type ReservationRow } from "./reservationService.js";
 
 export type VerifyOutcome =
@@ -43,7 +44,7 @@ function loadByCode(code: string) {
        JOIN dishes d ON d.id = r.dish_id
        WHERE r.reservation_code = ?`,
     )
-    .get(code.trim().toUpperCase()) as (ReservationRow & { phone: string; dish_name: string }) | undefined;
+    .get(normalizeReservationCode(code)) as (ReservationRow & { phone: string; dish_name: string }) | undefined;
 }
 
 export function lookupCode(code: string, restaurantId: number): VerifyOutcome {
@@ -71,7 +72,7 @@ export function issueTokens(code: string, restaurantId: number, userId: number):
          SET status = 'SERVED', used_at = datetime('now'), token_issued_at = datetime('now'), served_at = datetime('now')
          WHERE reservation_code = ? AND restaurant_id = ? AND status = 'RESERVED' AND payment_status = 'PAID'`,
       )
-      .run(code.trim().toUpperCase(), restaurantId);
+      .run(normalizeReservationCode(code), restaurantId);
     if (updated.changes !== 1) return null;
     db.prepare(
       `INSERT INTO tokens_issued (reservation_id, quantity, issued_by_user_id) VALUES (?, ?, ?)`,

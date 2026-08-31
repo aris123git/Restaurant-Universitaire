@@ -63,7 +63,7 @@ export function RuVerify() {
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="RU-582941"
-            className="flex-1 rounded-2xl border border-sand bg-paper px-4 py-4 text-center font-display text-3xl tracking-widest"
+            className="flex-1 rounded-2xl border border-sand bg-paper px-4 py-4 text-center font-display text-3xl tracking-[0.35em]"
             autoFocus
           />
           <button disabled={busy} className="rounded-2xl bg-forest px-8 py-4 text-xl font-semibold text-paper">

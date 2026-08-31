@@ -44,10 +44,10 @@ test("parcours USSD première utilisation → paiement → code unique", async (
   const afterConfirm = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
   assert.match(afterConfirm.message, /MODE TEST/);
   const done = await ussdSessionService.startOrResume(phone, first.sessionId, "1");
-  assert.match(done.message, /RU-\d{6}/);
+  assert.match(done.message, /RU-[A-Z0-9]{6}/);
   assert.equal(done.continueSession, false);
 
-  const code = done.message.match(/RU-\d{6}/)?.[0];
+  const code = done.message.match(/RU-[A-Z0-9]{6}/)?.[0];
   assert.ok(code);
   const sms = getDb().prepare("SELECT message FROM sms_logs WHERE phone = ?").get(phone) as { message: string };
   assert.match(sms.message, new RegExp(code));
