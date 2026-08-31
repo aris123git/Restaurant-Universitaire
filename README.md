@@ -15,7 +15,9 @@ Cette version est un **MVP en mode TEST**. USSD, paiement et SMS sont simulés.
         → saisie code + téléphone sur la tablette → jetons remis
 ```
 
-Quotas : **2 plats par jour** (midi et soir), **70 plats par mois**.  
+Quotas : **3 plats par jour** en règle générale, **70 par mois**.  
+En fin de mois, si le solde ne permet plus 3 plats tous les jours, **un dernier jour à 3** est possible puis le plafond passe à **2 plats / jour**.  
+Exemple : 10 jours restants et 21 plats → 3 demain, puis 2 jusqu’à la fin du mois.  
 Seuls les numéros présents dans `enrolled_students` peuvent réserver — table prévue pour l’import de la base universitaire.
 
 Chaque RU connecté sur sa tablette **ne voit que ses propres commandes**.

@@ -15,6 +15,13 @@ export function monthBounds(dateIso: string): { start: string; end: string } {
   };
 }
 
+export function remainingDaysInMonth(dateIso: string): number {
+  const { end } = monthBounds(dateIso);
+  const from = Date.parse(`${dateIso}T00:00:00Z`);
+  const to = Date.parse(`${end}T00:00:00Z`);
+  return Math.floor((to - from) / 86_400_000) + 1;
+}
+
 export function weekdayFromIso(dateIso: string): number {
   return new Date(`${dateIso}T12:00:00Z`).getUTCDay();
 }

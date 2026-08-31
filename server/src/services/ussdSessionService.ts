@@ -94,7 +94,7 @@ function quantityMenu(maxAllowed: number): string {
   for (let n = 1; n <= maxAllowed; n++) {
     lines.push(`${n}. ${n} plat${n > 1 ? "s" : ""}`);
   }
-  lines.push(`Reste aujourd'hui : ${maxAllowed} (max 2 / jour, midi + soir)`);
+  lines.push(`Reste aujourd'hui : ${maxAllowed} (jusqu'à 3 / jour, 2 en fin de mois)`);
   return numbered(lines);
 }
 
@@ -263,20 +263,10 @@ export class UssdSessionService {
       return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_SERVICE" };
     }
     const quota = quotaForStudent(getOrCreateStudent(session.phone).id, service);
-    if (quota.serviceAlreadyBooked) {
-      const msg = numbered([
-        `Vous avez déjà réservé le ${service === "MIDI" ? "midi" : "soir"} aujourd'hui.`,
-        "1. Midi",
-        "2. Soir",
-        "3. Modifier mon RU",
-      ]);
-      save(session, "SELECT_SERVICE", { service: null }, msg);
-      return { sessionId: session.session_id, message: msg, continueSession: true, step: "SELECT_SERVICE" };
-    }
     if (quota.dayRemaining <= 0) {
       return this.end(
         session,
-        `Quota du jour atteint (${quota.maxPerDay} plats : midi et soir). Revenez demain.`,
+        `Quota du jour atteint (${quota.maxPerDay} plat${quota.maxPerDay > 1 ? "s" : ""} aujourd'hui).`,
       );
     }
     if (quota.monthRemaining <= 0) {

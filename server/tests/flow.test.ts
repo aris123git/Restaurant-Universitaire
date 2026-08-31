@@ -51,7 +51,7 @@ test("parcours USSD : plat puis nombre → paiement → code + téléphone", asy
   assert.match(afterService.message, /Menu SOIR/);
   const afterDish = await ussd(PHONE, first.sessionId, "1");
   assert.match(afterDish.message, /Nombre de plats/);
-  assert.doesNotMatch(afterDish.message, /3 plats/);
+  assert.match(afterDish.message, /3 plat/);
   const afterQty = await ussd(PHONE, first.sessionId, "2");
   assert.match(afterQty.message, /2 plat/);
   await ussd(PHONE, first.sessionId, "1");
@@ -75,28 +75,20 @@ test("2 plats comptent pour 2 — isolation par RU", async () => {
   assert.equal(dashB.totals.totalPlates, 0);
 });
 
-test("quota : 2 plats / jour, midi puis soir, pas de 3e", async () => {
+test("quota : 3 plats / jour maximum, 4e refusé", async () => {
   const midi = await ussd(PHONE3, undefined, "");
   await ussd(PHONE3, midi.sessionId, "1");
   await ussd(PHONE3, midi.sessionId, "1");
   await ussd(PHONE3, midi.sessionId, "1");
   await ussd(PHONE3, midi.sessionId, "1");
-  await ussd(PHONE3, midi.sessionId, "1");
+  await ussd(PHONE3, midi.sessionId, "3");
   await ussd(PHONE3, midi.sessionId, "1");
   const midiPaid = await ussd(PHONE3, midi.sessionId, "1");
   assert.match(midiPaid.message, /RU-[A-Z0-9]{6}/);
 
-  const soir = await ussd(PHONE3, undefined, "");
-  await ussd(PHONE3, soir.sessionId, "2");
-  await ussd(PHONE3, soir.sessionId, "1");
-  await ussd(PHONE3, soir.sessionId, "1");
-  await ussd(PHONE3, soir.sessionId, "1");
-  const soirPaid = await ussd(PHONE3, soir.sessionId, "1");
-  assert.match(soirPaid.message, /RU-[A-Z0-9]{6}/);
-
-  const third = await ussd(PHONE3, undefined, "");
-  const blocked = await ussd(PHONE3, third.sessionId, "1");
-  assert.match(blocked.message, /déjà réservé|Quota du jour/i);
+  const extra = await ussd(PHONE3, undefined, "");
+  const blocked = await ussd(PHONE3, extra.sessionId, "2");
+  assert.match(blocked.message, /Quota du jour/i);
 });
 
 test("code + numéro obligatoires, mauvais numéro et mauvais RU", async () => {

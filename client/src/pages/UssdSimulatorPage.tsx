@@ -101,7 +101,7 @@ export function UssdSimulatorPage({ embedded = false }: { embedded?: boolean }) 
           </div>
           <p className="rounded-2xl bg-sand p-4 text-sm leading-6">
             Seuls les numéros inscrits dans la base universitaire (table des inscrits) peuvent réserver.
-            Numéros de démo : +22670000001, +22670111111. Quota : 2 plats / jour (midi + soir), 70 / mois.
+            Numéros de démo : +22670000001, +22670111111. Quota : 3 plats / jour (2 en fin de mois), 70 / mois.
             Après paiement, présentez le <strong>code suivi du numéro</strong> à la tablette.
           </p>
         </div>
