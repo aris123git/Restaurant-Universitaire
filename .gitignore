@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+*.db
+*.db-journal
+*.sqlite
+.env
+.DS_Store
+server/data
+client/dev-dist
+client/dist
+*.log
+.vite
+coverage
